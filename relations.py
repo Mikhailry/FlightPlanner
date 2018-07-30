@@ -13,7 +13,7 @@ class Customer(Base):
     password    = Column(String(50), nullable=False)
     first_name  = Column(String(50), nullable=False)
     last_name   = Column(String(50), nullable=False)
-    airport     = Column(CHAR(3), ForeignKey('airport.iata'), nullable=False)
+    airport     = Column(CHAR(3), ForeignKey('airport.code'), nullable=False)
 
 class CustomerAddress(Base):
     __tablename__ = 'customer_address'
@@ -44,7 +44,7 @@ class CustomerBilling(Base):
 class Airport(Base):
     __tablename__ = 'airport'
 
-    iata        = Column(CHAR(3), primary_key=True, index=True)
+    code        = Column(CHAR(3), primary_key=True, index=True)
     name        = Column(String(50), nullable=False)
     country     = Column(String(50), nullable=False)
     state       = Column(CHAR(2))
@@ -61,11 +61,11 @@ class Flight(Base):
 
     code        = Column(CHAR(2), ForeignKey('airline.code'), primary_key=True)
     flight_no   = Column(String(4), primary_key=True, nullable=False)
-    date        = Column(Date, primary_key=True, nullable=False)
+    date        = Column(Date, nullable=False)
     distance    = Column(Integer, nullable=False)
-    airport_depart  = Column(CHAR(3), ForeignKey('airport.iata'), nullable=False)
-    airport_arrival = Column(CHAR(3), ForeignKey('airport.iata'), nullable=False)
-    time_depart = Column(DateTime, nullable=False)
+    airport_depart  = Column(CHAR(3), ForeignKey('airport.code'), nullable=False)
+    airport_arrival = Column(CHAR(3), ForeignKey('airport.code'), nullable=False)
+    time_depart = Column(DateTime, primary_key=True, nullable=False)
     time_arrival= Column(DateTime, nullable=False)
     seat_max_first  = Column(Integer, nullable=False)
     seat_max_econ   = Column(Integer, nullable=False)
@@ -81,11 +81,11 @@ class Booking(Base):
     last_name   = Column(String(50), primary_key=True)
     code        = Column(CHAR(2), primary_key=True)
     flight_no   = Column(String(4), primary_key=True)
-    date        = Column(Date, primary_key=True)
+    time_depart = Column(DateTime, primary_key=True)
     seat_type   = Column(String(5), nullable=False)
     billing_id  = Column(String(20), nullable=False)
 
-    __table_args__ = (ForeignKeyConstraint(['code', 'flight_no', 'date'], ['flight.code', 'flight.flight_no', 'flight.date']),\
+    __table_args__ = (ForeignKeyConstraint(['code', 'flight_no', 'time_depart'], ['flight.code', 'flight.flight_no', 'flight.time_depart']),\
                       ForeignKeyConstraint(['email', 'billing_id'], ['customer_billing.email', 'customer_billing.billing_id']))
 
 
