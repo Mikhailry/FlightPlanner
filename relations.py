@@ -45,7 +45,7 @@ class Airport(Base):
     __tablename__ = 'airport'
 
     code        = Column(CHAR(3), primary_key=True, index=True)
-    name        = Column(String(50), nullable=False)
+    name        = Column(String(100), nullable=False)
     country     = Column(String(50), nullable=False)
     state       = Column(CHAR(2))
 
