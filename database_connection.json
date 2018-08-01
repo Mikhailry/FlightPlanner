@@ -1,7 +1,0 @@
-{
-	"hostname": "caveofwonders.duckdns.org",
-	"port": 	5432,
-	"username":	"dev",
-	"password":	"cs425",
-	"database":	"CS425"
-}
