@@ -63,17 +63,12 @@ def create_tables():
                 "\n"
                 "create table flight ("
                 "code varchar(2), "
-                "flight_no int, "
-                "date date, airport_depart varchar(3) not null, "
-                "airport_arrival varchar(3) not null, "
+                "flight_no varchar(4), "
                 "time_depart timestamp not null, "
                 "time_arrival timestamp not null, "
-                "seat_current_first int not null, "
-                "seat_current_econ int not null, "
-                "seat_max_first int not null, "
-                "seat_max_econ int not null, "
-                "price_first numeric(8, 2) not null, "
-                "price_econ numeric(8, 2) not null, "
+                "airport_depart varchar(3) not null, "
+                "airport_arrival varchar(3) not null, "
+                "distance int not null, "
                 "primary key (code, flight_no, time_depart), "
                 "foreign key (airport_depart) references "
                 "airport(code), "
@@ -81,22 +76,37 @@ def create_tables():
                 "airport(code), "
                 "foreign key (code) references airline);"
                 "\n"
+                "create table seat ("
+                "code varchar(2), "
+                "flight_no varchar(4), "
+                "time_depart timestamp, "
+                "type varchar(25) not null, "
+                "current int not null default 0, "
+                "max int not null default 0, "
+                "price numeric(8, 2) not null default 0, "
+                "primary key (code, flight_no, time_depart, type), "
+                "foreign key (code, flight_no, time_depart) references "
+                "flight on update cascade, "
+                "check (current <= max));"
+                "\n"
                 "create table booking ("
                 "booking_id varchar(10), "
                 "email varchar(50), "
                 "code varchar(2), "
-                "flight_no int, "
-                "date date, "
-                "first_name varchar(50), "
-                "last_name varchar(50), "
-                "class varchar(5) not null, "
+                "flight_no varchar(4), "
+                "time_depart timestamp, "
+                "first_name varchar(50) not null, "
+                "last_name varchar(50) not null, "
+                "type varchar(25) not null, "
                 "billing_id varchar(20), "
                 "primary key (booking_id, email, code, flight_no, "
-                "time_depart, first_name, last_name), "
+                "time_depart), "
                 "foreign key (email, billing_id) references "
-                "customer_billing, "
+                "customer_billing on delete set null, "
                 "foreign key (code, flight_no, time_depart) references "
-                "flight);"
+                "flight on update cascade, "
+                "foreign key (code, flight_no, time_depart, type) "
+                "references seat);"
                 "\n"
                 "create table mileage_program ("
                 "email varchar(50), "
@@ -120,7 +130,7 @@ def drop_tables():
 
     :returns: True if operation was successful, False otherwise
     """
-    sql = text(("drop table mileage_program, booking, flight, "
+    sql = text(("drop table mileage_program, booking, seat, flight, "
                 "customer_billing, customer_address, customer, "
                 "airport, airline"))
     try:
@@ -165,14 +175,25 @@ def load_sample_data():
                 "\n"
                 "insert into flight values "
                 "(:f_1_1, :f_1_2, :f_1_3, :f_1_4, :f_1_5, :f_1_6, "
-                ":f_1_7, :f_1_8, :f_1_9, :f_1_10, :f_1_11, :f_1_12, "
-                ":f_1_13), "
+                ":f_1_7), "
                 "(:f_2_1, :f_2_2, :f_2_3, :f_2_4, :f_2_5, :f_2_6, "
-                ":f_2_7, :f_2_8, :f_2_9, :f_2_10, :f_2_11, :f_2_12, "
-                ":f_2_13), "
+                ":f_2_7), "
                 "(:f_3_1, :f_3_2, :f_3_3, :f_3_4, :f_3_5, :f_3_6, "
-                ":f_3_7, :f_3_8, :f_3_9, :f_3_10, :f_3_11, :f_3_12, "
-                ":f_3_13);"
+                ":f_3_7);"
+                "\n"
+                "insert into seat values "
+                "(:s_1_1, :s_1_2, :s_1_3, :s_1_4, :s_1_5, :s_1_6, "
+                ":s_1_7), "
+                "(:s_2_1, :s_2_2, :s_2_3, :s_2_4, :s_2_5, :s_2_6, "
+                ":s_2_7), "
+                "(:s_3_1, :s_3_2, :s_3_3, :s_3_4, :s_3_5, :s_3_6, "
+                ":s_3_7),"
+                "(:s_4_1, :s_4_2, :s_4_3, :s_4_4, :s_4_5, :s_4_6, "
+                ":s_4_7),"
+                "(:s_5_1, :s_5_2, :s_5_3, :s_5_4, :s_5_5, :s_5_6, "
+                ":s_5_7),"
+                "(:s_6_1, :s_6_2, :s_6_3, :s_6_4, :s_6_5, :s_6_6, "
+                ":s_6_7);"
                 "\n"
                 "insert into booking values "
                 "(:b_1_1, :b_1_2, :b_1_3, :b_1_4, :b_1_5, :b_1_6, "
@@ -204,25 +225,32 @@ def load_sample_data():
             "cb_2_1": "foo@bar.com", "cb_2_2": "Mastercard",
             "cb_2_3": "John Smith", "cb_2_4": "8765432112345678",
             "cb_2_5": "05", "cb_2_6": "05", "cb_2_7": "Work",
-            "f_1_1": "AA", "f_1_2": "0001", "f_1_3": "2001-01-01",
-            "f_1_4": "LAX", "f_1_5": "ORD", "f_1_6": "2001-01-01 09:00",
-            "f_1_7": "2001-01-01 12:00", "f_1_8": 20, "f_1_9": 20,
-            "f_1_10": 40, "f_1_11": 100, "f_1_12": 400,
-            "f_1_13": 200, "f_2_1": "AA", "f_2_2": "0002",
-            "f_2_3": "2001-01-01", "f_2_4": "ORD", "f_2_5": "IAD",
-            "f_2_6": "2001-01-01 13:00", "f_2_7": "2001-01-01 15:00",
-            "f_2_8": 1, "f_2_9": 20, "f_2_10": 0, "f_2_11": 100,
-            "f_2_12": 200, "f_2_13": 100, "f_3_1": "AA",
-            "f_3_2": "0003", "f_3_3": "2001-01-01", "f_3_4": "IAD",
-            "f_3_5": "DCA", "f_3_6": "2001-01-01 16:00",
-            "f_3_7": "2001-01-01 17:00", "f_3_8": 0, "f_3_9": 20,
-            "f_3_10": 100, "f_3_11": 100, "f_3_12": 100,
-            "f_3_13": 50, "b_1_1": 1, "b_1_2": "foo@bar.com",
-            "b_1_3": "AA", "b_1_4": "0001", "b_1_5": "2001-01-01",
-            "b_1_6": "John", "b_1_7": "Smith", "b_1_8": "first",
+            "f_1_1": "AA", "f_1_2": "0001", "f_1_3": "2001-01-01 09:00",
+            "f_1_4": "2001-01-01 12:00", "f_1_5": "LAX", "f_1_6": "ORD",
+            "f_1_7": 517, "f_2_1": "AA", "f_2_2": "0002",
+            "f_2_3": "2001-01-01 13:00", "f_2_4": "2001-01-01 15:00",
+            "f_2_5": "ORD", "f_2_6": "IAD", "f_2_7": 438, 
+            "f_3_1": "AA", "f_3_2": "0003", "f_3_3": "2001-01-01 16:00",
+            "f_3_4": "2001-01-01 17:00", "f_3_5": "IAD", "f_3_6": "DCA",
+            "f_3_7": 319, "s_1_1": "AA", "s_1_2": "0001",
+            "s_1_3": "2001-01-01 09:00", "s_1_4": "first", "s_1_5": 5,
+            "s_1_6": 10, "s_1_7": 400, "s_2_1": "AA", "s_2_2": "0001",
+            "s_2_3": "2001-01-01 09:00", "s_2_4": "business",
+            "s_2_5": 10, "s_2_6": 20, "s_2_7": 300, "s_3_1": "AA",
+            "s_3_2": "0001", "s_3_3": "2001-01-01 09:00",
+            "s_3_4": "economy", "s_3_5": 50, "s_3_6": 80, "s_3_7": 150,
+            "s_4_1": "AA", "s_4_2": "0002", "s_4_3": "2001-01-01 13:00",
+            "s_4_4": "economy", "s_4_5": 10, "s_4_6": 20, "s_4_7": 300,
+            "s_5_1": "AA", "s_5_2": "0003", "s_5_3": "2001-01-01 16:00",
+            "s_5_4": "first", "s_5_5": 5, "s_5_6": 10, "s_5_7": 400,
+            "s_6_1": "AA", "s_6_2": "0003", "s_6_3": "2001-01-01 16:00",
+            "s_6_4": "economy", "s_6_5": 10, "s_6_6": 20, "s_6_7": 300,
+            "b_1_1": 1, "b_1_2": "foo@bar.com",
+            "b_1_3": "AA", "b_1_4": "0001", "b_1_5": "2001-01-01 09:00",
+            "b_1_6": "John", "b_1_7": "Smith", "b_1_8": "business",
             "b_1_9": "Visa", "b_2_1": 1, "b_2_2": "foo@bar.com",
-            "b_2_3": "AA", "b_2_4": "0001", "b_2_5": "2001-01-01",
-            "b_2_6": "Jane", "b_2_7": "Doe", "b_2_8": "first",
+            "b_2_3": "AA", "b_2_4": "0002", "b_2_5": "2001-01-01 13:00",
+            "b_2_6": "Jane", "b_2_7": "Doe", "b_2_8": "economy",
             "b_2_9": "Visa", "m_1": "foo@bar.com", "m_2": "AA",
             "m_3": 800}
     try:
@@ -232,4 +260,26 @@ def load_sample_data():
         return True
     except:
         print('Issue committing to database.')
+        return False
+
+def frontend_query_placeholder(param):
+    """
+    Placeholder for any frontend queries.
+
+    :returns: List if operation was successful, False otherwise
+    """
+    sql = text(("select stuff "
+                "from table "
+                "where column = :param"
+                "order by stuff"))
+    keys = {"thing": param}
+    try:
+        with engine.connect() as conn:
+            conn.execute(sql, keys)
+        resultSet = []
+        for row in result:
+            resultSet.append(row[0:])
+        return resultSet
+    except:
+        print('Issue querying database.')
         return False
