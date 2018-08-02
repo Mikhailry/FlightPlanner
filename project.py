@@ -1,433 +1,570 @@
 import json
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, aliased
-from relations import Base, Customer, CustomerAddress, CustomerBilling,\
-					  Airport, Airline, Flight, Booking, MileageProgram
+from sqlalchemy.sql import text
 
-#get connection url
 DB_CONN = json.loads(open('database_connection.json', 'r').read())
-engine = create_engine('postgresql+psycopg2://%s:%s@%s:%s/%s' %  \
-                      (DB_CONN['username'], DB_CONN['password'], \
-                       DB_CONN['hostname'], str(DB_CONN['port']),\
+engine = create_engine('postgresql://%s:%s@%s:%s/%s' %
+                      (DB_CONN['username'], DB_CONN['password'],
+                       DB_CONN['hostname'], str(DB_CONN['port']),
                        DB_CONN['database']))
-#setup session for sqlalchemy
-Base.metadata.bind = engine
-DBSession = sessionmaker(bind=engine)
-# session.add(Airport(code='ORD', name="O’Hare International Airport", country='USA', state='IL'))
-# session.add(Customer(email='makmoud98@gmail.com', password='pokemon', first_name='Michael', last_name='Elnajami', airport='ORD'))
-# session.commit()
 
-# check if email exists
-# if not return false
-# if so check if password is corrent
-# if password is incorrect return false, otherwise return true
 def login(email, password):
-	session = DBSession()
-	exists = session \
-			 .query(Customer) \
-			 .filter(Customer.email==email) \
-			 .first()
-	if not exists:
-		print('An account with that email address does not exist.')
-		session.close()
-		return False
-	elif exists.password != password:
-		print('Incorrect password.')
-		session.close()
-		return False
-	else:
-		print('Success!')
-		session.close()
-		return True
+    """
+    Validates login credentials
 
-# check if email exists
-# if so return false
-# otherwise ensure other params are not empty 
-# then insert into database
-# return true on success
+    :returns: True if matching email/password combination found in
+              table 'customer', False otherwise.
+    """
+    sql = text(("select email, password "
+                "from customer "
+                "where email = :email and password = :password"))
+    with engine.connect() as conn:
+        result = conn.execute(sql, {'email': email,
+                                    'password': password})
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if not resultSet:
+        print('That email/password combination is invalid.')
+        return False
+    else:
+        print('Success!')
+        return True
+
 def register(email, first_name, last_name, password, airport):
-	session = DBSession()
-	exists = session \
-			 .query(Customer) \
-			 .filter(Customer.email==email) \
-			 .first()
-	if exists:
-		print('An account with that email address already exists.')
-		session.close()
-		return False
-	elif not first_name or not last_name or not password or not airport:
-		print('One or more required fields are missing.')
-		session.close()
-		return False
-	else:
-		new_cust = Customer(email=email, first_name=first_name,
-							last_name=last_name, password=password,
-							airport=airport)
-		try:
-			session.add(new_cust)
-			session.commit()
-		except:
-			print('Issue committing to database.')
-			session.rollback()
-			session.close()
-			return False
-		print('Success!')
-		session.close()
-		return True
+    """
+    Inserts a new row into the 'customer' table
 
-# check if address_id already exists
-# then return false
-# check all other non-nulable params
+    :returns: True if the new user credentials are complete, unique,
+              and do not violate table 'customer' integrity constraints,
+              False otherwise or if the insert operation failed.
+    """
+    sql = text(("select email "
+                "from customer "
+                "where email = :email"))
+    with engine.connect() as conn:
+        result = conn.execute(sql, {'email': email})
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if resultSet:
+        print('An account with that email address already exists.')
+        return False
+    elif not first_name or not last_name or not password or not airport:
+        print('One or more required fields are missing.')
+        return False
+    else:
+        sql = text(("insert into customer "
+                    "values(:email, :first_name, "
+                    ":last_name, :password, :airport)"))
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, {'email': email,
+                                   'first_name': first_name,
+                                   'last_name': last_name,
+                                   'password': password,
+                                   'airport': airport})
+            conn.close()
+            print('Success!')
+            return True
+        except:
+            print('Issue committing to database.')
+            conn.close()
+            return False
+
 def add_address(email, address_id, name, address_line_1, address_line_2,
-				city, state, zip_code, phone_no):
-	session = DBSession()
-	exists = session \
-			 .query(CustomerAddress) \
-			 .filter(CustomerAddress.email==email,
-			 		 CustomerAddress.address_id==address_id) \
-			 .first()
-	if exists:
-		print('Address ID already exists.')
-		session.close()
-		return False
-	elif not address_id or not name or not address_line_1 or not city \
-	or not state or not zip_code or not phone_no:
-		print('One or more required fields are missing.')
-		session.close()
-		return False
-	else:
-		new_addr = CustomerAddress(email=email, address_id=address_id,
-								   name=name,
-								   address_line_1=address_line_1,
-								   address_line_2=address_line_2,
-								   city=city, state=state,
-								   zip_code=zip_code, phone_no=phone_no)
-		try:
-			session.add(new_addr)
-			session.commit()
-		except:
-			print('Issue committing to database.')
-			session.rollback()
-			session.close()
-			return False
-		print('Success!')
-		session.close()
-		return True
+                city, state, zip_code, phone_no):
+    """
+    Checks to see if the given email/address_id combination exists; if
+    not, inserts the row into the 'customer_address' table.
 
-# check if address_id already exists
-# else return false
-# check all other non-nulable params
+    :returns: True if the new address fields are complete and unique,
+              False otherwise or if the insert operation fails.
+    """
+    sql = text(("select email, address_id "
+                "from customer_address "
+                "where email = :email and address_id = :address_id"))
+    with engine.connect() as conn:
+        result = conn.execute(sql, {'email': email,
+                                    'address_id': address_id})
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if resultSet:
+        print('An address with that ID already exists.')
+        return False
+    elif not address_id or not name or not address_line_1 or not city \
+    or not state or not zip_code or not phone_no:
+        print('One or more required fields are missing.')
+        conn.close()
+        return False
+    else:
+        sql = text(("insert into customer_address "
+                    "values(:email, :address_id, :name, "
+                    ":address_line_1, :address_line_2, :city, :state, "
+                    ":zip_code, :phone_no)"))
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, {'email': email,
+                                   'address_id': address_id,
+                                   'name': name,
+                                   'address_line_1': address_line_1,
+                                   'address_line_2': address_line_2,
+                                   'city': city,
+                                   'state': state,
+                                   'zip_code': zip_code,
+                                   'phone_no': phone_no})
+            conn.close()
+            print('Success!')
+            return True
+        except:
+            print('Issue committing to database.')
+            conn.close()
+            return False
+
 def edit_address(email, address_id, name, address_line_1,
-				 address_line_2, city, state, zip_code, phone_no):
-	session = DBSession()
-	exists = session \
-			 .query(CustomerAddress) \
-			 .filter(CustomerAddress.email==email,
-    				 CustomerAddress.address_id==address_id) \
-			 .first()
-	if not exists:
-		print('Address ID does not exist.')
-		session.close()
-		return False
-	elif not address_id or not name or not address_line_1 or not city\
-	or not state or not zip_code or not phone_no:
-		print('One or more required fields are missing.')
-		session.close()
-		return False
-	else:
-		try:
-			session \
-			.query(CustomerAddress) \
-			.filter(CustomerAddress.email==email,
-				    CustomerAddress.address_id==address_id) \
-			.update({CustomerAddress.name: name,
-				     CustomerAddress.address_line_1: address_line_1,
-					 CustomerAddress.address_line_2: address_line_2,
-					 CustomerAddress.city: city,
-					 CustomerAddress.state: state,
-					 CustomerAddress.zip_code: zip_code,
-					 CustomerAddress.phone_no: phone_no})
-			session.commit()
-		except:
-			print('Issue committing to database.')
-			session.rollback()
-			session.close()
-			return False
-		print('Success!')
-		session.close()
-		return True
+                 address_line_2, city, state, zip_code, phone_no):
+    """
+    Checks to see if the given email/address_id combination exists; if
+    so, updates the row in the 'customer_address' table.
 
-# delete it
+    :returns: True if the new address fields are complete, unique, and
+              do not violate table 'customer_address' integrity
+              constraints, False otherwise or if the update operation
+              fails.
+    """
+    sql = text(("select email, address_id "
+                "from customer_address "
+                "where email = :email and address_id = :address_id"))
+    with engine.connect() as conn:
+        result = conn.execute(sql, {'email': email,
+                                    'address_id': address_id})
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if not resultSet:
+        print('An address with that ID does not exist.')
+        return False
+    elif not name or not address_line_1 or not city or not state \
+    or not zip_code or not phone_no:
+        print('One or more required fields are missing.')
+        conn.close()
+        return False
+    else:
+        sql = text(("update customer_address "
+                    "set name = :name, "
+                    "address_line_1 = :address_line_1, "
+                    "address_line_2 = :address_line_2, "
+                    "city = :city, state = :state, "
+                    "zip_code = :zip_code, phone_no = :phone_no "
+                    "where email = :email and "
+                    "address_id = :address_id"))
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, {'email': email,
+                                   'address_id': address_id,
+                                   'name': name,
+                                   'address_line_1': address_line_1,
+                                   'address_line_2': address_line_2,
+                                   'city': city,
+                                   'state': state,
+                                   'zip_code': zip_code,
+                                   'phone_no': phone_no})
+                conn.close()
+            print('Success!')
+            return True
+        except:
+            print('Issue committing to database.')
+            conn.close()
+            return False
+
 def delete_address(email, address_id):
-	session = DBSession()
-	exists = session \
-			 .query(CustomerAddress) \
-			 .filter(CustomerAddress.email==email,
-			 		 CustomerAddress.address_id==address_id) \
-			 .first()
-	if not exists:
-		print('Address ID does not exist.')
-		session.close()
-		return False
-	else:
-		try:
-			session \
-			 .query(CustomerAddress) \
-			 .filter(CustomerAddress.email==email,
-			 		 CustomerAddress.address_id==address_id) \
-			 .delete()
-			session.commit()
-		except:
-			print('Issue committing to database')
-			session.rollback()
-			session.close()
-			return False
-		print('Success!')
-		session.close()
-		return True
+    """
+    Checks to see if the given email/address_id combination exists; if
+    so, deletes the row in the 'customer_address' table assuming no
+    integrity constraints of 'customer_billing' are violated.
 
-# check if billing_id already exists
-# then return false
-# check if address_id is not empty and exists 
-# else return false
-# check if all other params are not empty
+    :returns: True if the row is deleted successfully, False if the
+              table 'customer_billing' integrity constraints are
+              violated upon deletion or if the delete operation fails.
+    """
+    sql = text(("select email, address_id "
+                "from customer_address "
+                "where email = :email and address_id = :address_id"))
+    with engine.connect() as conn:
+        result = conn.execute(sql, {'email': email,
+                                    'address_id': address_id})
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if not resultSet:
+        print('An address with that ID does not exist.')
+        return False
+    else:
+        sql = text(("delete from customer_address "
+                    "where email = :email and "
+                    "address_id = :address_id"))
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, {'email': email,
+                                   'address_id': address_id})
+                conn.close()
+            print('Success!')
+            return True
+        except:
+            print('Issue committing to database.')
+            conn.close()
+            return False
+
 def add_payment(email, billing_id, name, card_no, exp_mo, exp_yr,
-				address_id):
-	session = DBSession()
-	exists = session \
-			 .query(CustomerBilling) \
-			 .filter(CustomerBilling.email==email,
-			 		 CustomerBilling.billing_id==billing_id) \
-			 .first()
-	if exists:
-		print('Billing ID already exists.')
-		session.close()
-		return False
-	elif not billing_id or not name or not card_no or not exp_mo \
-	or not exp_yr or not address_id:
-		print('One or more required fields are missing.')
-		session.close()
-		return False
-	else:
-		new_billing = CustomerBilling(email=email,
-									  billing_id=billing_id, name=name,
-									  card_no=card_no, exp_mo=exp_mo,
-									  exp_yr=exp_yr,
-									  address_id=address_id)
-		try:
-			session.add(new_billing)
-			session.commit()
-		except:
-			print('Issue committing to database.')
-			session.rollback()
-			session.close()
-			return False
-		print('Success!')
-		session.close()
-		return True
+                address_id):
+    """
+    Checks to see if the given email/billing_id combination exists; if
+    not, inserts the row into the 'customer_billing' table.
 
-# check if billing id already exists
-# else return false
-# check if address_id is not empty and exists 
-# else return false
-# check if all other params are not empty
+    :returns: True if the new billing fields are complete and unique,
+              False otherwise or if the insert operation fails.
+    """
+    sql = text(("select email, billing_id "
+                "from customer_billing "
+                "where email = :email and billing_id = :billing_id"))
+    keys = {'email': email, 'billing_id': billing_id}
+    with engine.connect() as conn:
+        result = conn.execute(sql, keys)
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if resultSet:
+        print('A billing entry with that ID already exists.')
+        return False
+    elif not billing_id or not name or not card_no or not exp_mo \
+    or not exp_yr or not address_id:
+        print('One or more required fields are missing.')
+        conn.close()
+        return False
+    else:
+        sql = text(("insert into customer_billing "
+                    "values(:email, :billing_id, :name, :card_no, "
+                    ":exp_mo, :exp_yr, :address_id)"))
+        keys = {'email': email, 'billing_id': billing_id, 'name': name,
+                'card_no': card_no, 'exp_mo': exp_mo, 'exp_yr': exp_yr,
+                'address_id': address_id}
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, keys)
+            conn.close()
+            print('Success!')
+            return True
+        except:
+            print('Issue committing to database.')
+            conn.close()
+            return False
+
 def edit_payment(email, billing_id, name, card_no, exp_mo, exp_yr,
-				 address_id):
-	session = DBSession()
-	exists = session \
-			 .query(CustomerBilling) \
-			 .filter(CustomerBilling.email==email,
-			 		 CustomerBilling.billing_id==billing_id) \
-			 .first()
-	if not exists:
-		print('Billing ID does not exist.')
-		session.close()
-		return False
-	elif not billing_id or not name or not card_no or not exp_mo \
-	or not exp_yr or not address_id:
-		print('One or more required fields are missing.')
-		session.close()
-		return False
-	else:
-		try:
-			session \
-			.query(CustomerBilling) \
-			.filter(CustomerBilling.email==email,
-				    CustomerBilling.billing_id==billing_id) \
-			.update({CustomerBilling.name: name,
-				     CustomerBilling.card_no: card_no,
-					 CustomerBilling.exp_mo: exp_mo,
-					 CustomerBilling.exp_yr: exp_yr,
-					 CustomerBilling.address_id: address_id})
-			session.commit()
-		except:
-			print('Issue committing to database')
-			session.rollback()
-			session.close()
-			return False
-		print('Success!')
-		session.close()
-		return True
+                 address_id):
+    """
+    Checks to see if the given email/billing_id combination exists; if
+    so, updates the row in the 'customer_billing' table.
 
-# just delete
+    :returns: True if the new billing fields are complete and unique,
+              False otherwise or if the update operation fails.
+    """
+    sql = text(("select email, billing_id "
+                "from customer_billing "
+                "where email = :email and billing_id = :billing_id"))
+    keys = {'email': email, 'billing_id': billing_id}
+    with engine.connect() as conn:
+        result = conn.execute(sql, keys)
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if not resultSet:
+        print('A billing entry with that ID does not exist.')
+        return False
+    elif not name or not card_no or not exp_mo or not exp_yr \
+    or not address_id:
+        print('One or more required fields are missing.')
+        conn.close()
+        return False
+    else:
+        sql = text(("update customer_billing "
+                    "set name = :name, card_no = :card_no, "
+                    "exp_mo = :exp_mo, exp_yr = :exp_yr, "
+                    "address_id = :address_id "
+                    "where email = :email and "
+                    "billing_id = :billing_id"))
+        keys = {'email': email, 'billing_id': billing_id,
+                'name': name, 'card_no': card_no, 'exp_mo': exp_mo,
+                'exp_yr': exp_yr, 'address_id': address_id}
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, keys)
+                conn.close()
+            print('Success!')
+            return True
+        except:
+            print('Issue committing to database.')
+            conn.close()
+            return False
+
 def delete_payment(email, billing_id):
-	session = DBSession()
-	exists = session \
-			 .query(CustomerBilling) \
-			 .filter(CustomerBilling.email==email,
-			 		 CustomerBilling.billing_id==billing_id) \
-			 .first()
-	if not exists:
-		print('Billing ID does not exist.')
-		session.close()
-		return False
-	else:
-		try:
-			session.delete(exists)
-			session.commit()
-		except:
-			print('Issue committing to database')
-			session.rollback()
-			session.close()
-			return False
-		print('Success!')
-		session.close()
-		return True
+    """
+    Checks to see if the given email/billing_id combination exists; if
+    so, deletes the row in the 'customer_billing' table.
 
-# ensure that they have enough seats 
-# andy wll do ths
-# return array of `Flight`s
+    :returns: True if the row is deleted successfully, False if the
+              delete operation fails.
+    """
+    sql = text(("select email, billing_id "
+                "from customer_billing "
+                "where email = :email and billing_id = :billing_id"))
+    keys = {'email': email, 'billing_id': billing_id}
+    with engine.connect() as conn:
+        result = conn.execute(sql, keys)
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if not resultSet:
+        print('A billing entry with that ID does not exist.')
+        return False
+    else:
+        sql = text(("delete from customer_billing "
+                    "where email = :email and "
+                    "billing_id = :billing_id"))
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, keys)
+                conn.close()
+            print('Success!')
+            return True
+        except:
+            print('Issue committing to database.')
+            conn.close()
+            return False
+
 def find_flights(date, airport_depart, airport_arrival, max_stops):
-	session = DBSession()
-	query1 =  "select * \
-	  		   from flight \
-			   where date == :date \
-				 and airport_depart == :airport_depart \
-				 and airport_arrive == :airport_arrive \
-				 and (seat_current_first < seat_max_first \
-				      or seat_current_econ < seat_max_econ) \
-				 and :max_stops == 0"
-	query2 = "select * \
-			  from flight flight1, flight flight2 \
-			  where flight1.date == :date \
-				and flight1.airport_depart == :airport_depart \
-			    and flight2.airport_arrive == :airport_arrive \
-				and flight2.time_depart - flight1.time_arrive > [30min] \
-				and flight2.time_arrive - flight1.time_depart < [24hrs] \
-				and (flight1.seat_current_first < flight1.seat_max_first \
-				     or flight1.seat_current_econ < flight1.seat_max_econ) \
-				and (flight2.seat_current_first < flight2.seat_max_first \
-				     or flight2.seat_current_econ < flight2.seat_max_econ) \
-				and :max_stops == 1"
-	query3 = "select * \
-			  from flight flight1, flight flight2, flight flight3 \
-			  where flight1.date == :date \
-			    and flight1.airport_depart == :airport_depart \
-			    and flight2.airport_arrive == flight1.airport_depart \
-			    and flight3.airport_arrive == :airport_arrive \
-			    and flight2.time_depart - flight1.time_arrive > [30min] \
-			    and flight3.time_depart > flight2.time_arrive > [30min] \
-			    and flight3.time_arrive - flight1.time_depart < [48hrs] \
-			    and (flight1.seat_current_first < flight1.seat_max_first \
-			         or flight1.seat_current_econ < flight1.seat_max_econ) \
-			    and (flight2.seat_current_first < flight2.seat_max_first \
-			  	     or flight2.seat_current_econ < flight2.seat_max_econ) \
-			    and (flight3.seat_current_first < flight3.seat_max_first \
-			  	     or flight3.seat_current_econ < flight3.seat_max_econ) \
-			    and :max_stops == 2"
-	depart_exists = session \
-			        .query(Airport) \
-			        .filter(Airport.code==airport_depart) \
-			        .all()
-	if not depart_exists:
-		print('Departure airport does not exist.')
-		session.close()
-		return False
-	arrive_exists = session \
-					.query(Airport) \
-					.filter(Airport.code==airport_depart) \
-					.all()
-	if not arrive_exists:
-		print('Arrival airport does not exist.')
-		session.close()
-		return False
-	if max_stops == 0:
-		flights = session \
-		  		  .query(Flight) \
-		  		  .from_statement(text(query1)) \
-		  		  .params(date=date, airport_depart=airport_depart,
-		  		  	      airport_arrive=airport_arrive,
-		  		  	      max_stops=max_stops) \
-				  .all()
-		if not flights:
-			print('No flights found with the given criteria.')
-			session.close()
-			return False
-		else:
-			print('Success!')
-			session.close()
-			return flights
-	elif max_stops == 1:
-		
-		flights1 = session \
-		  		   .query(Flight1) \
-		  		   .from_statement(text(query1)) \
-		  		   .params(date=date, airport_depart=airport_depart,
-		  		   	       airport_arrive=airport_arrive,
-		  		  	       max_stops=max_stops) \
-				   .all()
-		flights2 = session \
-		  		   .query(Flight) \
-		  		   .from_statement(text(query2)) \
-		  		   .params(date=date, airport_depart=airport_depart,
-		  		   	       airport_arrive=airport_arrive,
-		  		  	       max_stops=max_stops) \
-				   .all()
-		if not flights1 and not flights2:
-			print('No flights found with the given criteria.')
-			session.close()
-			return False
-		else:
-			print('Success!')
-			session.close()
-			return flights1, flights2
-	elif max_stops == 2:
-		flights1 = session \
-		  		   .query(Flight1) \
-		  		   .from_statement(text(query1)) \
-		  		   .params(date=date, airport_depart=airport_depart,
-		  		   	       airport_arrive=airport_arrive,
-		  		  	       max_stops=max_stops) \
-				   .all()
-		flights2 = session \
-		  		   .query(Flight) \
-		  		   .from_statement(text(query2)) \
-		  		   .params(date=date, airport_depart=airport_depart,
-		  		   	       airport_arrive=airport_arrive,
-		  		  	       max_stops=max_stops) \
-				   .all()
-		flights3 = session \
-		  		   .query(Flight) \
-		  		   .from_statement(text(query3)) \
-		  		   .params(date=date, airport_depart=airport_depart,
-		  		   	       airport_arrive=airport_arrive,
-		  		  	       max_stops=max_stops) \
-				   .all()
-		if not flights1 and not flights2 and not flights3:
-			print('No flights found with the given criteria.')
-			session.close()
-			return False
-		else:
-			print('Success!')
-			session.close()
-			return flights1, flights2, flights3
-	else:
-		print('Up to two stops are permitted in an itinerary.')
-		session.close()
-		return False
+    """
+    Searches for a path from airport_depart to airport_arrival based on
+    how many layover stops are allowed. Each layover has the hard-coded
+    constraint of having a minimum duration of 30 minutes and a maximum
+    duration of 24 hours.
 
-def create_booking(email, first_name, last_name, code, flight_no, date, seat_type, billing_id):
-	pass
+    :returns: List(s) of matching flights if any are found, False
+              otherwise.
+    """
+    sql0 =  text(("select code, flight_no, airport_depart, "
+                  "airport_arrival, time_depart, time_arrival "
+                  "from flight "
+                  "where date = :date and "
+                  "airport_depart = :airport_depart and "
+                  "airport_arrival = :airport_arrival and "
+                  "(seat_current_first < seat_max_first or "
+                  "seat_current_econ < seat_max_econ)"))
+    sql1 = text(("select F1.code, F1.flight_no, "
+                 "F1.airport_depart, F1.airport_arrival, "
+                 "F1.time_depart, F1.time_arrival, F2.code, "
+                 "F2.flight_no, F2.airport_depart, "
+                 "F2.airport_arrival, F2.time_depart, "
+                 "F2.time_arrival "
+                 "from flight F1, flight F2 "
+                 "where F1.date = :date and "
+                 "F1.airport_depart = :airport_depart and "
+                 "F1.airport_arrival = F2.airport_depart and "
+                 "F2.airport_arrival = :airport_arrival and "
+                 "F2.time_depart > F1.time_arrival + interval "
+                 "\'30 minutes\' and "
+                 "F2.time_depart < F1.time_arrival + interval "
+                 "\'1 day\' and "
+                 "(F1.seat_current_first < F1.seat_max_first or "
+                 "F1.seat_current_econ < F1.seat_max_econ) and "
+                 "(F2.seat_current_first < F2.seat_max_first or "
+                 "F2.seat_current_econ < F2.seat_max_econ)"))
+    sql2 = text(("select F1.code, F1.flight_no, "
+                 "F1.airport_depart, F1.airport_arrival, "
+                 "F1.time_depart, F1.time_arrival, F2.code, "
+                 "F2.flight_no, F2.airport_depart, "
+                 "F2.airport_arrival, F2.time_depart, "
+                 "F2.time_arrival, F3.code, F3.flight_no, "
+                 "F3.airport_depart, F3.airport_arrival, "
+                 "F3.time_depart, F3.time_arrival "
+                 "from flight F1, flight F2, flight F3 "
+                 "where F1.date = :date and "
+                 "F1.airport_depart = :airport_depart and "
+                 "F1.airport_arrival = F2.airport_depart and "
+                 "F2.airport_arrival = F3.airport_depart and "
+                 "F3.airport_arrival = :airport_arrival and "
+                 "F2.time_depart > F1.time_arrival + interval "
+                 "\'30 minutes\' and "
+                 "F2.time_depart < F1.time_arrival + interval "
+                 "\'1 day\' and "
+                 "F3.time_depart > F2.time_arrival + interval "
+                 "\'30 minutes\' and "
+                 "F3.time_depart < F2.time_arrival + interval "
+                 "\'1 day\' and "
+                 "(F1.seat_current_first < F1.seat_max_first or "
+                 "F1.seat_current_econ < F1.seat_max_econ) and "
+                 "(F2.seat_current_first < F2.seat_max_first or "
+                 "F2.seat_current_econ < F2.seat_max_econ) and "
+                 "(F3.seat_current_first < F3.seat_max_first or "
+                 "F3.seat_current_econ < F3.seat_max_econ)"))
+    keys = {'date': date, 'airport_depart': airport_depart,
+                        'airport_arrival': airport_arrival}
+    if max_stops == 0:
+        with engine.connect() as conn:
+                result = conn.execute(sql0, keys)
+                conn.close()
+        flights = []
+        for row in result:
+            flights.append(row[0:])
+        if not flights:
+            print('No flights found with the given criteria.')
+            return False
+        else:
+            print('Success!')
+            return flights
+    elif max_stops == 1:
+        with engine.connect() as conn:
+                result = conn.execute(sql0, keys)
+                conn.close()
+        flights0 = []
+        for row in result:
+            flights0.append(row[0:])
+        with engine.connect() as conn:
+                result = conn.execute(sql1, keys)
+                conn.close()
+        flights1 = []
+        for row in result:
+            flights1.append(row[0:])
+        if not flights0 and not flights1:
+            print('No flights found with the given criteria.')
+            return False
+        else:
+            print('Success!')
+            return flights0, flights1
+    elif max_stops == 2:
+        with engine.connect() as conn:
+                result = conn.execute(sql0, keys)
+                conn.close()
+        flights0 = []
+        for row in result:
+            flights0.append(row[0:])
+        with engine.connect() as conn:
+                result = conn.execute(sql1, keys)
+                conn.close()
+        flights1 = []
+        for row in result:
+            flights1.append(row[0:])
+        with engine.connect() as conn:
+                result = conn.execute(sql2, keys)
+                conn.close()
+        flights2 = []
+        for row in result:
+            flights2.append(row[0:])
+        if not flights0 and not flights1 and not flights2:
+            print('No flights found with the given criteria.')
+            return False
+        else:
+            print('Success!')
+            return flights0, flights1, flights2
+    else:
+        print('Up to two stops are permitted in an itinerary.')
+        return False
+
+
+"""
+prior to create_booking, we get next booking_id
+"""
+def get_booking_id():
+
+    """
+    obtaining the current max booking_id
+    If booking_id == None then booking_id = 11111111
+    else booking_id = booking_id +1
+    """
+
+    sql = text(('select max(booking_id) from booking'))
+
+    with engine.connect() as conn:
+        result = conn.execute(sql)
+        conn.close()
+
+    resultSet = []
+
+    for row in result:
+        resultSet.append(row[0:])
+
+    booking_id = resultSet[0][0]
+
+    if booking_id == None:
+        booking_id = 11111111
+    else:
+        booking_id = booking_id + 1;
+
+    return booking_id
+    print(booking_id)
+
+"""
+insert each flight segment as a separate row with the same booking_id
+"""
+def create_booking(booking_id, email, first_name, last_name, code, flight_no, time_depart, seat_type, billing_id):
+
+    sql = text(("insert into booking values(:booking_id, :email, :first_name, :last_name, :code, :flight_no, :time_depart, :seat_type, :billing_id)"))
+    keys = {'booking_id':booking_id, 'email': email, 'first_name':first_name, 'last_name':last_name, 'code':code, 'flight_no':flight_no, 'time_depart':time_depart, 'seat_type':seat_type, 'billing_id':billing_id}
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(sql, keys)
+        conn.close()
+        print('Booking created!')
+
+        """
+        update miles for booking
+        """
+        calculate_miles(booking_id)
+
+    except:
+        print('Issue creating booking.')
+        conn.close()
+
+    """
+    increment current seat by 1
+    """
+    print ('Booking seat type: ' + seat_type)
+    if seat_type == 'econ':
+        sql=text(('update flight set seat_current_econ = seat_current_econ + 1 where code = :code and flight_no = :flight_no and time_depart = :time_depart'))
+        keys = {'code':code, 'flight_no':flight_no, 'time_depart':time_depart}
+
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, keys)
+            conn.close()
+            print('Number of economy seats updated!')
+        except:
+            print('Issue updating economy seats.')
+            conn.close()
+
+    elif seat_type == 'first':
+        sql=text(('update flight set seat_current_first = seat_current_first + 1 where code = :code and flight_no = :flight_no and time_depart = :time_depart'))
+        keys = {'code':code, 'flight_no':flight_no, 'time_depart':time_depart}
+
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, keys)
+            conn.close()
+            print('Number of first class seats updated')
+        except:
+            print('Issue updating first class seats.')
+            conn.close()
+
+
 
 # delete booking
 # remove bonus miles
@@ -435,6 +572,76 @@ def create_booking(email, first_name, last_name, code, flight_no, date, seat_typ
 def cancel_booking(booking_id):
 	pass
 
-# todo: find a way to do this given 2 airport codes
-def calculate_miles(code1, code2):
-	pass
+# calculate miles by summing distance for each segment from 'flight' relation (distance for each record with the same booking number)
+# and inserting the result for the booking owner
+def calculate_miles(booking_id):
+
+    """
+    first, calculating bonus miles for the flights (booking)
+    """
+    sql = text(("select booking_id, email, code, distance from booking inner join flight using(code, flight_no, time_depart)"
+                "where booking_id=:booking_id"))
+    keys = {'booking_id': booking_id}
+
+    with engine.connect() as conn:
+        result = conn.execute(sql, keys)
+        conn.close()
+
+    bookingSegments = []
+    totalMiles = 0
+    for row in result:
+        bookingSegments.append(row[0:])
+        print (row)
+
+    """
+    insert/update miles in mileage_program for the booking owner
+    """
+
+    for segment in bookingSegments:
+        """"
+        check whether mileage_program exists for the bookingOwner
+        if True - update miles
+        else - insert miles
+        """
+
+        bookingOwner = segment[1]
+        airline = segment[2]
+        miles = segment[3]
+
+        sql = text(('select count(*) from mileage_program where email = :bookingOwner and code = :airline'))
+        keys = {'bookingOwner': bookingOwner, 'airline': airline}
+
+        with engine.connect() as conn:
+            result = conn.execute(sql, keys)
+            conn.close()
+
+        resultSet = []
+        for row in result:
+            resultSet.append(row[0:])
+
+        if resultSet[0][0] == 0:
+            print('User is not part of mileage program')
+            #insert user miles
+            sql = text(('insert into mileage_program values(:email, :code, :bonus_miles)'))
+            keys = {'email': bookingOwner, 'code': airline, 'bonus_miles': miles}
+            try:
+                with engine.connect() as conn:
+                    conn.execute(sql, keys)
+                conn.close()
+                print('Success!')
+            except:
+                print('Issue committing to database.')
+                conn.close()
+        else:
+            print('User is in!')
+            #update user miles
+            sql = text(('update mileage_program set bonus_miles = bonus_miles + :add_miles where email = :email and code=:code'))
+            keys = {'email': bookingOwner, 'code': airline, 'add_miles': miles}
+            try:
+                with engine.connect() as conn:
+                    conn.execute(sql, keys)
+                conn.close()
+                print('Update succefull!')
+            except:
+                print('Issue committing to database.')
+                conn.close()
