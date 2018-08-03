@@ -564,13 +564,27 @@ def create_booking(booking_id, email, first_name, last_name, code, flight_no, ti
             print('Issue updating first class seats.')
             conn.close()
 
-
-
 # delete booking
 # remove bonus miles
 # sub 1 from the current seat
 def cancel_booking(booking_id):
-	pass
+
+    """
+    remove bonus miles
+    """
+
+
+
+    """
+    substract 1 from current seat
+    """
+
+
+    """
+    delete booking
+    """
+
+
 
 # calculate miles by summing distance for each segment from 'flight' relation (distance for each record with the same booking number)
 # and inserting the result for the booking owner
@@ -579,7 +593,7 @@ def calculate_miles(booking_id):
     """
     first, calculating bonus miles for the flights (booking)
     """
-    sql = text(("select booking_id, email, code, distance from booking inner join flight using(code, flight_no, time_depart)"
+    sql = text(("select booking_id, email, code, distance, seat_type from booking inner join flight using(code, flight_no, time_depart)"
                 "where booking_id=:booking_id"))
     keys = {'booking_id': booking_id}
 
@@ -588,10 +602,8 @@ def calculate_miles(booking_id):
         conn.close()
 
     bookingSegments = []
-    totalMiles = 0
     for row in result:
         bookingSegments.append(row[0:])
-        print (row)
 
     """
     insert/update miles in mileage_program for the booking owner
@@ -606,7 +618,13 @@ def calculate_miles(booking_id):
 
         bookingOwner = segment[1]
         airline = segment[2]
-        miles = segment[3]
+        seat_type = segment[4]
+
+        #for first class seat - number of bonus miles = distance *2
+        if seat_type == 'econ':
+            miles = segment[3]
+        elif seat_type == 'first':
+            miles = segment[3]*2
 
         sql = text(('select count(*) from mileage_program where email = :bookingOwner and code = :airline'))
         keys = {'bookingOwner': bookingOwner, 'airline': airline}
