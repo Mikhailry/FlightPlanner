@@ -506,18 +506,17 @@ def get_booking_id():
     if booking_id == None:
         booking_id = 11111111
     else:
-        booking_id = booking_id + 1;
+        booking_id = str(int(booking_id) + 1);
 
     return booking_id
-    print(booking_id)
 
 """
 insert each flight segment as a separate row with the same booking_id
 """
-def create_booking(booking_id, email, first_name, last_name, code, flight_no, time_depart, seat_type, billing_id):
+def create_booking(booking_id, email, code, flight_no, time_depart, first_name, last_name, type, billing_id):
 
-    sql = text(("insert into booking values(:booking_id, :email, :first_name, :last_name, :code, :flight_no, :time_depart, :seat_type, :billing_id)"))
-    keys = {'booking_id':booking_id, 'email': email, 'first_name':first_name, 'last_name':last_name, 'code':code, 'flight_no':flight_no, 'time_depart':time_depart, 'seat_type':seat_type, 'billing_id':billing_id}
+    sql = text(("insert into booking values(:booking_id, :email, :code, :flight_no, :time_depart, :first_name, :last_name, :type, :billing_id)"))
+    keys = {'booking_id':booking_id, 'email': email, 'code':code, 'flight_no':flight_no, 'time_depart':time_depart, 'first_name':first_name, 'last_name':last_name,   'type':type, 'billing_id':billing_id}
 
     try:
         with engine.connect() as conn:
@@ -530,61 +529,100 @@ def create_booking(booking_id, email, first_name, last_name, code, flight_no, ti
         """
         calculate_miles(booking_id)
 
+        """
+        increment current seat by 1
+        """
+
+        print ('Booking seat type: ' + type)
+
+        sql=text(('update seat set current = current + 1 where code = :code and flight_no = :flight_no and time_depart = :time_depart and type = :type'))
+        keys = {'code':code, 'flight_no':flight_no, 'time_depart':time_depart, 'type': type}
+
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, keys)
+            conn.close()
+            print('Number of seats updated!')
+        except:
+            print('Issue updating seats.')
+            conn.close()
+
     except:
         print('Issue creating booking.')
         conn.close()
 
-    """
-    increment current seat by 1
-    """
-    print ('Booking seat type: ' + seat_type)
-    if seat_type == 'econ':
-        sql=text(('update flight set seat_current_econ = seat_current_econ + 1 where code = :code and flight_no = :flight_no and time_depart = :time_depart'))
-        keys = {'code':code, 'flight_no':flight_no, 'time_depart':time_depart}
 
-        try:
-            with engine.connect() as conn:
-                conn.execute(sql, keys)
-            conn.close()
-            print('Number of economy seats updated!')
-        except:
-            print('Issue updating economy seats.')
-            conn.close()
-
-    elif seat_type == 'first':
-        sql=text(('update flight set seat_current_first = seat_current_first + 1 where code = :code and flight_no = :flight_no and time_depart = :time_depart'))
-        keys = {'code':code, 'flight_no':flight_no, 'time_depart':time_depart}
-
-        try:
-            with engine.connect() as conn:
-                conn.execute(sql, keys)
-            conn.close()
-            print('Number of first class seats updated')
-        except:
-            print('Issue updating first class seats.')
-            conn.close()
 
 # delete booking
 # remove bonus miles
 # sub 1 from the current seat
 def cancel_booking(booking_id):
 
-    """
-    remove bonus miles
-    """
+    try:
+        """
+        remove bonus miles
+        """
+        remove_miles(booking_id)
+
+        """
+        substract 1 from current seat
+        To do that we need to obtain:
+        code, flight_no, time_depart, type from booking
+        """
+
+        #obtain parameters of booking by booking_id
+        sql=text(('select code, flight_no, time_depart, type from booking where booking_id=:booking_id'))
+        keys = {'booking_id': str(booking_id)}
+
+        with engine.connect() as conn:
+            result = conn.execute(sql, keys)
+            conn.close()
+
+        bookingSegments = []
+        for row in result:
+            bookingSegments.append(row[0:])
+
+        #iterate over flight segments and decrement number of seats occupied
+        for segment in bookingSegments:
+
+            code = segment[0]
+            flight_no = segment[1]
+            time_depart = segment[2]
+            type = segment[3]
 
 
+            print ('Booking seat type: ' + type)
 
-    """
-    substract 1 from current seat
-    """
+            sql=text(('update seat set current = current - 1 where code = :code and flight_no = :flight_no and time_depart = :time_depart and type = :type'))
+            keys = {'code':code, 'flight_no':flight_no, 'time_depart':time_depart, 'type': type}
 
+            try:
+                with engine.connect() as conn:
+                    conn.execute(sql, keys)
+                    conn.close()
+                    print('Number of seats updated!')
+            except:
+                print('Issue updating seats.')
+                conn.close()
 
-    """
-    delete booking
-    """
+        """
+        delete booking
+        """
+        sql = text(("delete from booking where booking_id=:booking_id"))
+        keys = {'booking_id': str(booking_id)}
 
+        try:
+            with engine.connect() as conn:
+                conn.execute(sql, keys)
+            conn.close()
+            print('Booking canceled!')
+        except:
+            print('Booking was NOT cancelled.')
+            conn.close()
 
+    except:
+        print('Issue canceling the booking.')
+        conn.close()
 
 # calculate miles by summing distance for each segment from 'flight' relation (distance for each record with the same booking number)
 # and inserting the result for the booking owner
@@ -593,9 +631,9 @@ def calculate_miles(booking_id):
     """
     first, calculating bonus miles for the flights (booking)
     """
-    sql = text(("select booking_id, email, code, distance, seat_type from booking inner join flight using(code, flight_no, time_depart)"
+    sql = text(("select booking_id, email, code, distance, type from booking inner join flight using(code, flight_no, time_depart) "
                 "where booking_id=:booking_id"))
-    keys = {'booking_id': booking_id}
+    keys = {'booking_id': str(booking_id)}
 
     with engine.connect() as conn:
         result = conn.execute(sql, keys)
@@ -618,12 +656,15 @@ def calculate_miles(booking_id):
 
         bookingOwner = segment[1]
         airline = segment[2]
-        seat_type = segment[4]
+        type = segment[4]
 
-        #for first class seat - number of bonus miles = distance *2
-        if seat_type == 'econ':
+        #for first class seat - number of bonus miles = distance *3
+        #for business - number of bonus miles = distance *2
+        if type == 'economy':
             miles = segment[3]
-        elif seat_type == 'first':
+        elif type == 'first':
+            miles = segment[3]*3
+        elif type == 'business':
             miles = segment[3]*2
 
         sql = text(('select count(*) from mileage_program where email = :bookingOwner and code = :airline'))
@@ -651,9 +692,80 @@ def calculate_miles(booking_id):
                 print('Issue committing to database.')
                 conn.close()
         else:
-            print('User is in!')
+            print('User is a part of mileage_program!')
             #update user miles
             sql = text(('update mileage_program set bonus_miles = bonus_miles + :add_miles where email = :email and code=:code'))
+            keys = {'email': bookingOwner, 'code': airline, 'add_miles': miles}
+            try:
+                with engine.connect() as conn:
+                    conn.execute(sql, keys)
+                conn.close()
+                print('Update succefull!')
+            except:
+                print('Issue committing to database.')
+                conn.close()
+
+
+# remove miles calculates number of miles to be removed
+# for each flight segment and airline of booking to be deleted
+def remove_miles(booking_id):
+
+    """
+    first, calculating bonus miles for the flights (booking)
+    """
+    sql = text(("select booking_id, email, code, distance, type from booking inner join flight using(code, flight_no, time_depart) "
+                "where booking_id=:booking_id"))
+    keys = {'booking_id': str(booking_id)}
+
+    with engine.connect() as conn:
+        result = conn.execute(sql, keys)
+        conn.close()
+
+    bookingSegments = []
+    for row in result:
+        bookingSegments.append(row[0:])
+
+    """
+    update (substract) miles in mileage_program for the booking owner
+    """
+
+    for segment in bookingSegments:
+        """"
+        check whether mileage_program exists for the bookingOwner
+        if True - update miles (substract)
+        else - print ('User is not a part of mileage_program')
+        """
+
+        bookingOwner = segment[1]
+        airline = segment[2]
+        type = segment[4]
+
+        #for first class seat - number of bonus miles = distance *3
+        #for business - number of bonus miles = distance *2
+        if type == 'economy':
+            miles = segment[3]
+        elif type == 'first':
+            miles = segment[3]*3
+        elif type == 'business':
+            miles = segment[3]*2
+
+        sql = text(('select count(*) from mileage_program where email = :bookingOwner and code = :airline'))
+        keys = {'bookingOwner': bookingOwner, 'airline': airline}
+
+        with engine.connect() as conn:
+            result = conn.execute(sql, keys)
+            conn.close()
+
+        resultSet = []
+        for row in result:
+            resultSet.append(row[0:])
+
+        if resultSet[0][0] == 0:
+            print('User is not part of mileage program')
+        else:
+            print('User is a part of mileage_program!')
+            #update user miles
+            sql = text(('update mileage_program set bonus_miles = bonus_miles - :add_miles where email = :email and code=:code'))
             keys = {'email': bookingOwner, 'code': airline, 'add_miles': miles}
             try:
                 with engine.connect() as conn:
