@@ -15,7 +15,7 @@ def login(email, password):
     :returns: True if matching email/password combination found in
               table 'customer', False otherwise.
     """
-    sql = text(("select email, password "
+    sql = text(("select * "
                 "from customer "
                 "where email = :email and password = :password"))
     with engine.connect() as conn:
@@ -30,7 +30,7 @@ def login(email, password):
         return False
     else:
         print('Success!')
-        return True
+        return resultSet[0]
 
 def register(email, first_name, last_name, password, airport):
     """
@@ -57,8 +57,8 @@ def register(email, first_name, last_name, password, airport):
         return False
     else:
         sql = text(("insert into customer "
-                    "values(:email, :first_name, "
-                    ":last_name, :password, :airport)"))
+                    "values(:email, :password, :first_name, "
+                    ":last_name, :airport)"))
         try:
             with engine.connect() as conn:
                 conn.execute(sql, {'email': email,
@@ -73,6 +73,26 @@ def register(email, first_name, last_name, password, airport):
             print('Issue committing to database.')
             conn.close()
             return False
+
+def get_airports():
+    """
+    Validates login credentials
+
+    :returns: True if matching email/password combination found in
+              table 'customer', False otherwise.
+    """
+    sql = text(("select * "
+                "from airport "))
+    with engine.connect() as conn:
+        result = conn.execute(sql)
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    if not resultSet:
+        return False
+    else:
+        return resultSet
 
 def add_address(email, address_id, name, address_line_1, address_line_2,
                 city, state, zip_code, phone_no):
