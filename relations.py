@@ -100,7 +100,7 @@ def create_tables():
                 "type varchar(25) not null, "
                 "billing_id varchar(20), "
                 "primary key (booking_id, email, code, flight_no, "
-                "time_depart), "
+                "time_depart, first_name, last_name), "
                 "foreign key (email, billing_id) references "
                 "customer_billing on delete set null, "
                 "foreign key (code, flight_no, time_depart) references "
