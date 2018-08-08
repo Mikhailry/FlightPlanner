@@ -90,7 +90,7 @@ def create_tables():
                 "check (current <= max));"
                 "\n"
                 "create table booking ("
-                "booking_id varchar(10), "
+                "booking_id varchar(10) not null, "
                 "email varchar(50), "
                 "code varchar(2), "
                 "flight_no varchar(4), "
