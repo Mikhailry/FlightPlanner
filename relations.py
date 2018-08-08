@@ -15,47 +15,47 @@ def create_tables():
     :returns: True is operation was successful, False otherwise
     """
     sql = text(("create table airline ("
-                "code varchar(2), "
+                "code varchar(2) not null, "
                 "name varchar(50) not null, "
                 "country varchar(50) not null, "
                 "primary key (code));"
                 "\n"
                 "create table airport ("
-                "code varchar(3), "
+                "code varchar(3) not null, "
                 "name varchar(100) not null, "
                 "country varchar(50) not null, "
                 "state varchar(2), "
                 "primary key (code));"
                 "\n"
                 "create table customer ("
-                "email varchar(50), "
+                "email varchar(50) not null, "
                 "password varchar(50) not null, "
                 "first_name varchar(50) not null, "
                 "last_name varchar(50) not null, "
-                "airport varchar(3) not null, "
+                "airport varchar(3), "
                 "primary key (email), "
                 "foreign key (airport) references airport(code));"
                 "\n"
                 "create table customer_address ("
                 "email varchar(50), "
-                "address_id varchar(20), "
+                "address_id varchar(20) not null, "
                 "name varchar(50) not null, "
                 "address_line_1 varchar(50) not null, "
-                "address_line_2 varchar(50) not null, "
+                "address_line_2 varchar(50), "
                 "city varchar(50) not null, "
                 "state varchar(2) not null, "
                 "zip varchar(10) not null, "
-                "phone_no varchar(15), "
+                "phone_no varchar(15) not null, "
                 "primary key (email, address_id), "
                 "foreign key (email) references customer);"
                 "\n"
                 "create table customer_billing ("
                 "email varchar(50), "
-                "billing_id varchar(20), "
+                "billing_id varchar(20) not null, "
                 "name varchar(50) not null, "
                 "card_no numeric(16, 0) not null, "
                 "exp_mo varchar(2) not null, "
-                "exp_hr int not null, "
+                "exp_yr int not null, "
                 "address_id varchar(20), "
                 "primary key (email, billing_id), "
                 "foreign key (email, address_id) references "
@@ -63,11 +63,11 @@ def create_tables():
                 "\n"
                 "create table flight ("
                 "code varchar(2), "
-                "flight_no varchar(4), "
+                "flight_no varchar(4) not null, "
                 "time_depart timestamp not null, "
                 "time_arrival timestamp not null, "
-                "airport_depart varchar(3) not null, "
-                "airport_arrival varchar(3) not null, "
+                "airport_depart varchar(3), "
+                "airport_arrival varchar(3), "
                 "distance int not null, "
                 "primary key (code, flight_no, time_depart), "
                 "foreign key (airport_depart) references "
@@ -114,7 +114,24 @@ def create_tables():
                 "bonus_miles int not null default 0, "
                 "primary key (email, code), "
                 "foreign key (email) references customer, "
-                "foreign key (code) references airline);"))
+                "foreign key (code) references airline);"
+                "\n"
+                "create index customer_index on customer(email);"
+                "\n"
+                "create index customerAddr_index on "
+                "customer_address(email);"
+                "\n"
+                "create index customerBill_index on "
+                "customer_billing(email);"
+                "\n"
+                "create index flight_index on "
+                "flight(code, flight_no, time_depart);"
+                "\n"
+                "create index seat_index on "
+                "seat(code, flight_no, time_depart);"
+                "\n"
+                "create index booking_index on "
+                "booking(booking_id);"))
     try:
         with engine.connect() as conn:
             conn.execute(sql)
@@ -260,26 +277,4 @@ def load_sample_data():
         return True
     except:
         print('Issue committing to database.')
-        return False
-
-def frontend_query_placeholder(param):
-    """
-    Placeholder for any frontend queries.
-
-    :returns: List if operation was successful, False otherwise
-    """
-    sql = text(("select stuff "
-                "from table "
-                "where column = :param"
-                "order by stuff"))
-    keys = {"thing": param}
-    try:
-        with engine.connect() as conn:
-            conn.execute(sql, keys)
-        resultSet = []
-        for row in result:
-            resultSet.append(row[0:])
-        return resultSet
-    except:
-        print('Issue querying database.')
         return False
