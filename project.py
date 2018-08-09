@@ -12,7 +12,7 @@ def login(email, password):
     """
     Validates login credentials
 
-    :returns: True if matching email/password combination found in
+    :returns: Matching email/password combination if found in
               table 'customer', False otherwise.
     """
     sql = text(("select * "
@@ -72,7 +72,8 @@ def register(email, first_name, last_name, password, airport):
 
 def get_airlines():
     sql = text(("select code, name "
-                "from airline;"))
+                "from airline "
+                "order by name;"))
     with engine.connect() as conn:
         result = conn.execute(sql)
     resultSet = []
@@ -91,7 +92,8 @@ def get_airports():
               table 'customer', False otherwise.
     """
     sql = text(("select * "
-                "from airport;"))
+                "from airport "
+                "order by name;"))
     with engine.connect() as conn:
         result = conn.execute(sql)
     resultSet = []
@@ -397,7 +399,8 @@ def delete_payment(email, billing_id):
             print('Issue committing to database.')
             return False
 
-def find_flights(date, airport_depart, airport_arrival, max_stops):
+def find_flights(date, airport_depart, airport_arrival, max_time,
+                 max_price, max_stops):
     """
     Searches for a path from airport_depart to airport_arrival based on
     how many layover stops are allowed. Each layover has the hard-coded
@@ -407,23 +410,30 @@ def find_flights(date, airport_depart, airport_arrival, max_stops):
     :returns: List(s) of matching flights if any are found, False
               otherwise.
     """
-    sql0 =  text(("select flight.code, flight.flight_no, "
-                  "airport_depart, airport_arrival, "
-                  "flight.time_depart, time_arrival, type, price "
-                  "from flight, seat "
-                  "where flight.code = seat.code and "
-                  "flight.flight_no = seat.flight_no and "
-                  "flight.time_depart = seat.time_depart and "
-                  "date(flight.time_depart) = :date and "
-                  "airport_depart = :airport_depart and "
-                  "airport_arrival = :airport_arrival and "
-                  "current < max"))
+    sql0 = text(("select flight.code, flight.flight_no, "
+                 "airport_depart, airport_arrival, "
+                 "flight.time_depart, time_arrival, type, "
+                 "time_arrival - flight.time_depart trip_time, price "
+                 "from flight, seat "
+                 "where flight.code = seat.code and "
+                 "flight.flight_no = seat.flight_no and "
+                 "flight.time_depart = seat.time_depart and "
+                 "date(flight.time_depart) = :date and "
+                 "airport_depart = :airport_depart and "
+                 "airport_arrival = :airport_arrival and "
+                 "((:max_time != '-1 hours' and time_arrival <= "
+                 "flight.time_depart + interval :max_time) or "
+                 ":max_time = '-1 hours') and "
+                 "((:max_price != -1 and price <= :max_price) or "
+                 ":max_price = -1) and "
+                 "current < max"))
     sql1 = text(("select F1.code, F1.flight_no, "
                  "F1.airport_depart, F1.airport_arrival, "
                  "F1.time_depart, F1.time_arrival, F2.code, "
                  "F2.flight_no, F2.airport_depart, "
                  "F2.airport_arrival, F2.time_depart, "
                  "F2.time_arrival, S1.type, S2.type, "
+                 "F2.time_arrival - F1.time_depart trip_time, "
                  "S1.price + S2.price total_price "
                  "from flight F1, flight F2, seat S1, seat S2 "
                  "where F1.code = S1.code and "
@@ -440,6 +450,11 @@ def find_flights(date, airport_depart, airport_arrival, max_stops):
                  "\'30 minutes\' and "
                  "F2.time_depart < F1.time_arrival + interval "
                  "\'1 day\' and "
+                 "((:max_time != '-1 hours' and F2.time_arrival <= "
+                 "F1.time_depart + interval :max_time) or "
+                 ":max_time = '-1 hours') and "
+                 "((:max_price != -1 and S1.price + S2.price <= "
+                 ":max_price) or :max_price = -1) and "
                  "S1.current < S1.max and "
                  "S2.current < S2.max"))
     sql2 = text(("select F1.code, F1.flight_no, "
@@ -450,7 +465,8 @@ def find_flights(date, airport_depart, airport_arrival, max_stops):
                  "F2.time_arrival, F3.code, F3.flight_no, "
                  "F3.airport_depart, F3.airport_arrival, "
                  "F3.time_depart, F3.time_arrival, S1.type, S2.type, "
-                 "S3.type, S1.price + S2.price + S3.price total_price "
+                 "S3.type, F3.time_arrival - F1.time_depart trip_time, "
+                 "S1.price + S2.price + S3.price total_price "
                  "from flight F1, flight F2, flight F3, seat S1, "
                  "seat S2, seat S3 "
                  "where F1.code = S1.code and "
@@ -475,11 +491,17 @@ def find_flights(date, airport_depart, airport_arrival, max_stops):
                  "\'30 minutes\' and "
                  "F3.time_depart < F2.time_arrival + interval "
                  "\'1 day\' and "
+                 "((:max_time != '-1 hours' and F3.time_arrival <= "
+                 "F1.time_depart + interval :max_time) or "
+                 ":max_time = '-1 hours') and "
+                 "((:max_price != -1 and S1.price + S2.price + "
+                 "S3.price <= :max_price) or :max_price = -1) and "
                  "S1.current < S1.max and "
                  "S2.current < S2.max and "
                  "S3.current < S3.max"))
     keys = {'date': date, 'airport_depart': airport_depart,
-                        'airport_arrival': airport_arrival}
+            'airport_arrival': airport_arrival, 'max_time': max_time,
+            'max_price': max_price}
     if max_stops == 0:
         with engine.connect() as conn:
                 result = conn.execute(sql0, keys)
@@ -566,43 +588,6 @@ def get_booking_id():
 
     return booking_id
 
-"""
-insert each flight segment as a separate row with the same booking_id
-"""
-# def create_booking(booking_id, email, code, flight_no, time_depart, first_name, last_name, type, billing_id):
-
-#     sql = text(("insert into booking values(:booking_id, :email, :code, :flight_no, :time_depart, :first_name, :last_name, :type, :billing_id)"))
-#     keys = {'booking_id':booking_id, 'email': email, 'code':code, 'flight_no':flight_no, 'time_depart':time_depart, 'first_name':first_name, 'last_name':last_name,   'type':type, 'billing_id':billing_id}
-
-#     try:
-#         with engine.connect() as conn:
-#             conn.execute(sql, keys)
-#         print('Booking created!')
-
-#         """
-#         update miles for booking
-#         """
-#         calculate_miles(booking_id)
-
-#         """
-#         increment current seat by 1
-#         """
-
-#         print ('Booking seat type: ' + type)
-
-#         sql=text(('update seat set current = current + 1 where code = :code and flight_no = :flight_no and time_depart = :time_depart and type = :type'))
-#         keys = {'code':code, 'flight_no':flight_no, 'time_depart':time_depart, 'type': type}
-
-#         try:
-#             with engine.connect() as conn:
-#                 conn.execute(sql, keys)
-#             print('Number of seats updated!')
-#         except:
-#             print('Issue updating seats.')
-
-#     except:
-#         print('Issue creating booking.')
-#         return 'Issue adding ' + str([booking_id, email, code, flight_no, time_depart, first_name, last_name, type, billing_id]) + ' to booking'
 def create_booking(booking_id, email, code, flight_no, time_depart, first_name, last_name, type, billing_id):
     sql = text(("insert into booking "
                 "values(:booking_id, :email, :code, :flight_no, "

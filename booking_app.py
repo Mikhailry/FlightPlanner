@@ -33,6 +33,18 @@ class FindFlightsApp(server.App):
         "value": "YYYY-MM-DD"
         },
         {
+        "type": "text",
+        "key": "max_time",
+        "label": "Optional: Maximum Trip Time (Hours)",
+        "value": ""
+        },
+        {
+        "type": "text",
+        "key": "max_price",
+        "label": "Optional: Maximum Trip Price",
+        "value": ""
+        },
+        {
         "type": "dropdown",
         "key": "stops",
         "label": "Number of Stops",
@@ -86,15 +98,24 @@ class FindFlightsApp(server.App):
     def find_flights(self, params):
         errors = []
         empty = [[]]
-        for _ in range(8):
+        for _ in range(9):
             empty[0].append("")
         result = pd.DataFrame(np.array(empty),
             columns = ["Airline", "Code", "Departure Airport",
                        "Arrival Airport", "Departure Time",
-                       "Arrival Time", "Class", "Price"])
+                       "Arrival Time", "Class", "Trip Duration",
+                       "Price"])
         airport_depart = params["airport_depart"]
         airport_arrival = params["airport_arrival"]
         date = params["date"]
+        if not params["max_time"]:
+            max_time = "-1 hours"
+        else:
+            max_time = params["max_time"] + " hours"
+        if not params["max_price"]:
+            max_price = -1
+        else:
+            max_price = int(float(params["max_price"]))
         stops = params["stops"]
 
         if "errors" in cherrypy.session:
@@ -110,14 +131,14 @@ class FindFlightsApp(server.App):
             date = ""
         if airport_depart and airport_arrival and date:
             flights = project.find_flights(date, airport_depart,
-                airport_arrival, 2)
+                airport_arrival, max_time, max_price, 2)
             if flights:
                 if stops == "0" and flights[0]:    
                     result = pd.DataFrame(np.array(flights[0]),
                         columns = ["Airline", "Code",
                         "Departure Airport", "Arrival Airport",
                         "Departure Time", "Arrival Time", "Class",
-                        "Price"])
+                        "Trip Duration", "Price"])
                 elif stops == "1" and flights[1]:
                     result = pd.DataFrame(np.array(flights[1]),
                         columns = ["Flight 1: Airline",
@@ -130,7 +151,7 @@ class FindFlightsApp(server.App):
                         "Flight 2: Arrival Airport",
                         "Flight 2: Departure Time",
                         "Flight 2: Arrival Time", "Flight 1: Class",
-                        "Flight 2: Class", "Total Price"])
+                        "Flight 2: Class", "Trip Duration", "Total Price"])
                 elif stops == "2" and flights[2]:
                     result = pd.DataFrame(np.array(flights[2]),
                         columns = ["Flight 1: Airline",
@@ -149,7 +170,7 @@ class FindFlightsApp(server.App):
                         "Flight 3: Departure Time",
                         "Flight 3: Arrival Time", "Flight 1: Class",
                         "Flight 2: Class", "Flight 3: Class",
-                        "Total Price"])
+                        "Trip Duration", "Total Price"])
         if errors:
             cherrypy.session["errors"] = errors
         return result
@@ -367,8 +388,7 @@ class CancelBookingApp(server.App):
         "type": "text",
         "key": "booking_id",
         "label": "Booking ID",
-        "value": "",
-        "action_id": "update_data"
+        "value": ""
     }]
 
     controls = [{
