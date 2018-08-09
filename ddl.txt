@@ -1,0 +1,105 @@
+create table airline (
+    code varchar(2) not null,
+    name varchar(50) not null,
+    country varchar(50) not null,
+    primary key (code));
+
+create table airport (
+    code varchar(3) not null,
+    name varchar(100) not null,
+    country varchar(50) not null,
+    state varchar(2),
+    primary key (code));
+
+create table customer (
+    email varchar(50) not null,
+    password varchar(50) not null,
+    first_name varchar(50) not null,
+    last_name varchar(50) not null,
+    airport varchar(3),
+    primary key (email),
+    foreign key (airport) references airport(code));
+
+create table customer_address (
+    email varchar(50),
+    address_id varchar(20) not null,
+    name varchar(50) not null,
+    address_line_1 varchar(50) not null,
+    address_line_2 varchar(50),
+    city varchar(50) not null,
+    state varchar(2) not null,
+    zip varchar(10) not null,
+    phone_no varchar(15) not null,
+    primary key (email, address_id),
+    foreign key (email) references customer);
+
+create table customer_billing (
+    email varchar(50),
+    billing_id varchar(20) not null,
+    name varchar(50) not null,
+    card_no numeric(16, 0) not null,
+    exp_mo varchar(2) not null,
+    exp_yr int not null,
+    address_id varchar(20),
+    primary key (email, billing_id),
+    foreign key (email, address_id) references customer_address
+        on delete cascade);
+
+create table flight (
+    code varchar(2),
+    flight_no varchar(4) not null,
+    time_depart timestamp not null,
+    time_arrival timestamp not null,
+    airport_depart varchar(3),
+    airport_arrival varchar(3),
+    distance int not null,
+    primary key (code, flight_no, time_depart),
+    foreign key (airport_depart) references airport(code),
+    foreign key (airport_arrival) references airport(code),
+    foreign key (code) references airline);
+
+create table seat (
+    code varchar(2),
+    flight_no varchar(4),
+    time_depart timestamp,
+    type varchar(25) not null,
+    current int not null default 0,
+    max int not null default 0,
+    price numeric(8, 2) not null default 0,
+    primary key (code, flight_no, time_depart, type),
+    foreign key (code, flight_no, time_depart) references flight
+        on update cascade,
+    check (current <= max));
+
+create table booking (
+    booking_id varchar(10) not null,
+    email varchar(50),
+    code varchar(2),
+    flight_no varchar(4),
+    time_depart timestamp,
+    first_name varchar(50) not null,
+    last_name varchar(50) not null,
+    type varchar(25),
+    billing_id varchar(20),
+    primary key (booking_id, email, code, flight_no, time_depart,
+                 first_name, last_name),
+    foreign key (email, billing_id) references customer_billing
+        on delete set null,
+    foreign key (code, flight_no, time_depart) references flight
+        on update cascade,
+    foreign key (code, flight_no, time_depart, type) references seat);
+
+create table mileage_program (
+    email varchar(50),
+    code varchar(2),
+    bonus_miles int not null default 0,
+    primary key (email, code),
+    foreign key (email) references customer,
+    foreign key (code) references airline);
+
+create index customer_index on customer(email);
+create index customerAddr_index on customer_address(email);
+create index customerBill_index on customer_billing(email);
+create index flight_index on flight(code, flight_no, time_depart);
+create index seat_index on seat(code, flight_no, time_depart);
+create index booking_index on booking(booking_id);
