@@ -400,7 +400,8 @@ def delete_payment(email, billing_id):
             return False
 
 def find_flights(date, airport_depart, airport_arrival, max_time,
-                 max_price, max_stops):
+                 max_price, max_stops, order_by_0, order_by_1,
+                 order_by_2):
     """
     Searches for a path from airport_depart to airport_arrival based on
     how many layover stops are allowed. Each layover has the hard-coded
@@ -426,7 +427,7 @@ def find_flights(date, airport_depart, airport_arrival, max_time,
                  ":max_time = '-1 hours') and "
                  "((:max_price != -1 and price <= :max_price) or "
                  ":max_price = -1) and "
-                 "current < max"))
+                 "current < max") + order_by_0)
     sql1 = text(("select F1.code, F1.flight_no, "
                  "F1.airport_depart, F1.airport_arrival, "
                  "F1.time_depart, F1.time_arrival, F2.code, "
@@ -456,7 +457,7 @@ def find_flights(date, airport_depart, airport_arrival, max_time,
                  "((:max_price != -1 and S1.price + S2.price <= "
                  ":max_price) or :max_price = -1) and "
                  "S1.current < S1.max and "
-                 "S2.current < S2.max"))
+                 "S2.current < S2.max") + order_by_1)
     sql2 = text(("select F1.code, F1.flight_no, "
                  "F1.airport_depart, F1.airport_arrival, "
                  "F1.time_depart, F1.time_arrival, F2.code, "
@@ -498,7 +499,7 @@ def find_flights(date, airport_depart, airport_arrival, max_time,
                  "S3.price <= :max_price) or :max_price = -1) and "
                  "S1.current < S1.max and "
                  "S2.current < S2.max and "
-                 "S3.current < S3.max"))
+                 "S3.current < S3.max") + order_by_2)
     keys = {'date': date, 'airport_depart': airport_depart,
             'airport_arrival': airport_arrival, 'max_time': max_time,
             'max_price': max_price}

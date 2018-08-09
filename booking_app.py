@@ -49,8 +49,17 @@ class FindFlightsApp(server.App):
         "key": "stops",
         "label": "Number of Stops",
         "options": [{"label": "0", "value": "0"},
-            {"label": "1", "value": "1"},
-            {"label": "2", "value": "2"}]
+                    {"label": "1", "value": "1"},
+                    {"label": "2", "value": "2"}]
+        },
+        {
+        "type": "dropdown",
+        "key": "order",
+        "label": "Order results by:",
+        "options": [{"label": "Price (Asc)", "value": "price_asc"},
+                    {"label": "Price (Desc)", "value": "price_desc"},
+                    {"label": "Trip Time (Asc)", "value": "time_asc"},
+                    {"label": "Trip Time (Desc)", "value": "time_desc"}]
         }
     ]
 
@@ -111,12 +120,43 @@ class FindFlightsApp(server.App):
         if not params["max_time"]:
             max_time = "-1 hours"
         else:
-            max_time = params["max_time"] + " hours"
+            try:
+                float(params["max_time"])
+                max_time = params["max_time"] + " hours"
+            except:
+                max_time = "-1 hours"
+                errors.append("Max Trip Time field is not a number.")
         if not params["max_price"]:
             max_price = -1
         else:
-            max_price = int(float(params["max_price"]))
+            try:
+                max_price = float(params["max_price"])
+            except:
+                max_price = -1
+                errors.append("Max Trip Price field is not a number.")
         stops = params["stops"]
+        if params["order"] == "price_asc":
+            order_by_0 = " order by price;"
+            order_by_1 = " order by S1.price + S2.price;"
+            order_by_2 = " order by S1.price + S2.price + S3.price;"
+        elif params["order"] == "price_desc":
+            order_by_0 = " order by price desc;"
+            order_by_1 = " order by S1.price + S2.price desc;"
+            order_by_2 = (" order by S1.price + S2.price + "
+                          "S3.price desc;")
+        elif params["order"] == "time_asc":
+            order_by_0 = " order by time_arrival - flight.time_depart;"
+            order_by_1 = (" order by F2.time_arrival - "
+                          "F1.time_depart;")
+            order_by_2 = (" order by F3.time_arrival - "
+                          "F1.time_depart;")
+        elif params["order"] == "time_desc":
+            order_by_0 = (" order by time_arrival - "
+                          "flight.time_depart desc;")
+            order_by_1 = (" order by F2.time_arrival - "
+                          "F1.time_depart desc;")
+            order_by_2 = (" order by F3.time_arrival - "
+                          "F1.time_depart desc;")
 
         if "errors" in cherrypy.session:
             del cherrypy.session["errors"]
@@ -131,7 +171,8 @@ class FindFlightsApp(server.App):
             date = ""
         if airport_depart and airport_arrival and date:
             flights = project.find_flights(date, airport_depart,
-                airport_arrival, max_time, max_price, 2)
+                airport_arrival, max_time, max_price, 2, order_by_0,
+                order_by_1, order_by_2)
             if flights:
                 if stops == "0" and flights[0]:    
                     result = pd.DataFrame(np.array(flights[0]),
