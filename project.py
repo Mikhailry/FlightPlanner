@@ -281,6 +281,19 @@ def delete_address(email, address_id):
             print('Issue committing to database.')
             return False
 
+def get_addresses(email):
+
+    sql = text(("select * "
+                "from customer_address "
+                "where email = :email"))
+    with engine.connect() as conn:
+        result = conn.execute(sql, {'email': email})
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    return resultSet
+
 def add_payment(email, billing_id, name, card_no, exp_mo, exp_yr,
                 address_id):
     """
@@ -398,6 +411,19 @@ def delete_payment(email, billing_id):
         except:
             print('Issue committing to database.')
             return False
+
+def get_payments(email):
+
+    sql = text(("select * "
+                "from customer_billing "
+                "where email = :email"))
+    with engine.connect() as conn:
+        result = conn.execute(sql, {'email': email})
+        conn.close()
+    resultSet = []
+    for row in result:
+        resultSet.append(row[0:])
+    return resultSet
 
 def find_flights(date, airport_depart, airport_arrival, max_time,
                  max_price, max_stops, order_by_0, order_by_1,
@@ -609,7 +635,7 @@ def create_booking(booking_id, email, code, flight_no, time_depart, first_name, 
         with engine.connect() as conn:
             conn.execute(sql, keys)
         print("Booking created!")
-        return "Flight " + str([booking_id, email, code, flight_no, time_depart, first_name, last_name, type, billing_id]) + " successfully added to booking." 
+        return "Flight " + str([booking_id, email, code, flight_no, time_depart, first_name, last_name, type, billing_id]) + " successfully added to booking."
 
     except:
         print("Issue creating booking.")
